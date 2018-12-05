@@ -3,7 +3,4 @@
 .git/
 .ipynb_checkpoints/
 code/logs
-model/token_vec_300.bin
-model/tokenvec_bilstm2_siamese_model.h5
-model/vocab.txt
 __pycache__/

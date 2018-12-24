@@ -24,8 +24,8 @@ def process_for_xgb(df):
     print("proces raw data for xgb...")
     # 去除用户USER_ID 为空的数据
     df.dropna(subset=['USER_ID'], inplace=True, axis=0)
-    # 使用平均值填充AGE的缺失值
-    df['AGE'] = df['AGE'].fillna(df['AGE'].mean())
+    # 使用众数填充AGE的缺失值
+    df['AGE'] = df['AGE'].fillna(df['AGE'].median())
     # 使用0 填充Sale_houcs/JFCS和CFCF的缺失值
     df['Purchase_houcs'] = df['Purchase_houcs'].fillna(0).astype('int32')
     df['Sale_houcs'] = df['Sale_houcs'].fillna(0).astype('int32')
@@ -108,7 +108,6 @@ def process_for_kmeans(df):
     df['Sale_houcs'] = df['Sale_houcs'].fillna(0).astype('int32')
     df['JFCS'] = df['JFCS'].fillna(0).astype('int32')
     df['CFCS'] = df['CFCS'].fillna(0).astype('int32')  # 类别标签1
-    df['CFCS_Label'] = df['CFCS'].apply(lambda x: 1 if x != 0 else 0)  # 类别标签1
 
     # 去除噪音的列或者无关紧要的列
     df.drop(
@@ -126,19 +125,20 @@ def process_for_kmeans(df):
 def train_by_kmeans():
     data = pd.read_csv('data/credit_final_data.csv')
     data = process_for_kmeans(df=data)
-
     print("training k-means")
     clf = KMeans(algorithm='auto', copy_x=True, init='k-means++', max_iter=300,
                  n_clusters=10, n_init=10, n_jobs=1, precompute_distances='auto',
                  random_state=42, tol=0.0001, verbose=0)
-    clf.fit(data)
+    # 去除USER_ID一列
+    cols = [col for col in data.columns if col not in ['USER_ID']]
+    clf.fit(data[cols])
     clf = KMeans(algorithm='auto', copy_x=True, init='k-means++', max_iter=300,
                  n_clusters=10, n_init=10, n_jobs=1, precompute_distances='auto',
                  random_state=42, tol=0.0001, verbose=0)
     clf.fit(data)
     data['label'] = clf.labels_  # 对原数据表进行类别标记
-    data['label'].value_counts().plot(kind='barh')
-    plt.show()
+    # data['label'].value_counts().plot(kind='barh')
+    # plt.show()
     data['label'] = data['label'].apply(lambda x: (10 - x) * 9)
     # data[['USER_ID', 'label']].to_csv('submission.csv', index=None)
 
@@ -161,6 +161,10 @@ def main():
 
     result = pd.merge(result_xgb, result_kmeans, how='inner', on='USER_ID')
     result['label'] = result['label_x'] * 0.7 + result['label_y'] * 0.3
+    result.to_csv('result.csv')
+
+    result['USER_ID'] = result['USER_ID'].astype('int32')
+    result['label'] = result['label'].apply(lambda x: round(x, 2))
     result['label'] = result['label'].apply(lambda x: round(x, 2))
     result.rename(columns={'USER_ID': '用户ID', 'label': '房产信用评分'}, inplace=True)
     result[['用户ID', '房产信用评分']].to_csv('User_Credit_Predict.csv', index=False)

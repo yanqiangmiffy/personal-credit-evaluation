@@ -15,6 +15,7 @@ from imblearn.over_sampling import SMOTE
 from sklearn.cluster import KMeans
 import matplotlib.pyplot as plt
 
+
 def process_for_classification(df):
     """
     分类模型 数据预处理
@@ -33,7 +34,7 @@ def process_for_classification(df):
     # 去除噪音的列或者无关紧要的列
     df.drop(
         columns=['SEX', 'HOU_ID', 'PROPERTY_SIGN_DATE', 'PROPERTY_RECORD_DATE', 'Mortgage_starttime',
-                 'Mortgage_endtime', 'JFCS'],
+                 'Mortgage_endtime'],
         inplace=True, axis=1)
 
     # 处理类别标签 one-hot
@@ -41,7 +42,7 @@ def process_for_classification(df):
                  'PROPERTY_PAYMENT']
     df = pd.get_dummies(df, columns=cate_cols)
     # 提取X和Y标签
-    cols = [col for col in df.columns if col not in ['USER_ID', 'CFCS_Label', 'CFCS']]
+    cols = [col for col in df.columns if col not in ['USER_ID', 'CFCS_Label', 'CFCS', 'JFCS']]
     X = df[cols]
     y = df['CFCS_Label']
     print(len(X))
@@ -93,21 +94,45 @@ def train_by_xgb():
 train_by_xgb()
 
 
+def process_for_kmeans(df):
+    # 使用平均值填充AGE的缺失值
+    df['AGE'] = df['AGE'].fillna(df['AGE'].mean())
+    # 使用0 填充Sale_houcs/JFCS和CFCF的缺失值
+    df['Purchase_houcs'] = df['Purchase_houcs'].fillna(0).astype('int32')
+    df['Sale_houcs'] = df['Sale_houcs'].fillna(0).astype('int32')
+    df['JFCS'] = df['JFCS'].fillna(0).astype('int32')
+    df['CFCS'] = df['CFCS'].fillna(0).astype('int32')  # 类别标签1
+    df['CFCS_Label'] = df['CFCS'].apply(lambda x: 1 if x != 0 else 0)  # 类别标签1
+
+    # 去除噪音的列或者无关紧要的列
+    df.drop(
+        columns=['SEX', 'HOU_ID', 'PROPERTY_SIGN_DATE', 'PROPERTY_RECORD_DATE', 'Mortgage_starttime',
+                 'Mortgage_endtime'],
+        inplace=True, axis=1)
+
+    # 处理类别标签 one-hot
+    cate_cols = ['TEL_ID', 'PROVINCE', 'NATIONALITY', 'PROPERTY_ID', 'PROPERTY_USAGE_TYPE', 'PROPERTY_LOAN_WAY',
+                 'PROPERTY_PAYMENT']
+    df = pd.get_dummies(df, columns=cate_cols)
+    return df
+
+
 def train_by_kmeans():
     data = pd.read_csv('data/credit_pri_data.csv')
-    cols = [col for col in data.columns if col not in ['USER_ID']]
+    data = process_for_kmeans(df=data)
     clf = KMeans(algorithm='auto', copy_x=True, init='k-means++', max_iter=300,
                  n_clusters=10, n_init=10, n_jobs=1, precompute_distances='auto',
                  random_state=42, tol=0.0001, verbose=0)
-    clf.fit(data[cols])
+    clf.fit(data)
     clf = KMeans(algorithm='auto', copy_x=True, init='k-means++', max_iter=300,
                  n_clusters=10, n_init=10, n_jobs=1, precompute_distances='auto',
                  random_state=42, tol=0.0001, verbose=0)
-    clf.fit(data[cols])
+    clf.fit(data)
     data['label'] = clf.labels_  # 对原数据表进行类别标记
     data['label'].value_counts().plot(kind='barh')
     plt.show()
     data['label'] = data['label'].apply(lambda x: (10 - x) * 9)
     data[['USER_ID', 'label']].to_csv('submission.csv', index=None)
+
 
 train_by_kmeans()

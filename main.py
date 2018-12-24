@@ -59,7 +59,11 @@ def train_by_xgb():
     # 3:1 将数据换分出训练集和测试集
     x_train, x_test, y_train, y_test = train_test_split(x_res, y_res)
     print(len(x_train), len(x_test), len(x_train) + len(x_test))
-    clf = XGBClassifier(max_depth=6)
+    clf = XGBClassifier(learning_rate=0.1,
+                        n_estimators=100, silent=True,
+                        objective="binary:logistic",
+                        booster='gbtree',
+                        max_depth=6)
     clf.fit(x_train, y_train,
             eval_set=[(x_test, y_test)],
             eval_metric='logloss',
@@ -145,9 +149,11 @@ def main():
     result_xgb = train_by_xgb()
     result_kmeans = train_by_kmeans()
     result = pd.merge(result_xgb, result_kmeans, how='inner', on='USER_ID')
-    result['label']=result['label_x']*0.7+result['label_y']*0.3
-    result['label']=result['label'].apply(lambda x:round(x,2))
-    result[['USER_ID', 'label']].to_csv('User_Credit_Predict.csv',index=False)
+    result['label'] = result['label_x'] * 0.7 + result['label_y'] * 0.3
+    result['label'] = result['label'].apply(lambda x: round(x, 2))
+    result.drop_duplicates(subset='USER_ID',keep='first', inplace=True)
+    result.rename(columns={ 'USER_ID': '用户ID','label':'房产信用评分'}, inplace=True)
+    result[['用户ID', '房产信用评分']].to_csv('User_Credit_Predict.csv', index=False)
 
 
 if __name__ == '__main__':

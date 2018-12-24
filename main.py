@@ -16,12 +16,14 @@ from sklearn.cluster import KMeans
 import matplotlib.pyplot as plt
 
 
-def process_for_classification(df):
+def process_for_xgb(df):
     """
     分类模型 数据预处理
     :return:
     """
-    print("proces raw data...")
+    print("proces raw data for xgb...")
+    # 去除用户USER_ID 为空的数据
+    df.dropna(subset=['USER_ID'], inplace=True, axis=0)
     # 使用平均值填充AGE的缺失值
     df['AGE'] = df['AGE'].fillna(df['AGE'].mean())
     # 使用0 填充Sale_houcs/JFCS和CFCF的缺失值
@@ -45,20 +47,18 @@ def process_for_classification(df):
     cols = [col for col in df.columns if col not in ['USER_ID', 'CFCS_Label', 'CFCS', 'JFCS']]
     X = df[cols]
     y = df['CFCS_Label']
-    print(len(X))
     return X, y
 
 
 def train_by_xgb():
+    data = pd.read_csv('data/credit_final_data.csv')
+    X, y = process_for_xgb(df=data)
     print("training xgb model...")
     # 处理类别不均衡问题
-    data = pd.read_csv('data/credit_pri_data.csv')
-    X, y = process_for_classification(df=data)
     smote = SMOTE(random_state=42)
     x_res, y_res = smote.fit_sample(X.values, y.values)
     # 3:1 将数据换分出训练集和测试集
     x_train, x_test, y_train, y_test = train_test_split(x_res, y_res)
-    print(len(x_train), len(x_test), len(x_train) + len(x_test))
     clf = XGBClassifier(learning_rate=0.1,
                         n_estimators=100, silent=True,
                         objective="binary:logistic",
@@ -75,13 +75,13 @@ def train_by_xgb():
     label = pd.DataFrame()
     label['y_pred'] = y_pred
     y_prob = clf.predict_proba(x_test)[:, 1]
-    print(accuracy_score(y_test, y_pred))
-    print(roc_auc_score(y_test, y_prob))
+    print("Evaluation on test precision ：%s" % accuracy_score(y_test, y_pred))
+    print("Evaluation on test auc score  ：%s" % roc_auc_score(y_test, y_prob))
 
     # 根据分类概率得出用户评分
-    print("forming the final result")
-    all_data = pd.read_csv('data/credit_pri_data.csv')
-    x_all, _ = process_for_classification(df=all_data)
+    print("forming the xgb final result")
+    all_data = pd.read_csv('data/credit_final_data.csv')
+    x_all, _ = process_for_xgb(df=all_data)
     all_data['label'] = clf.predict_proba(x_all.values)[:, 0]
     all_data['label'] = all_data['label'].apply(lambda x: round(x * 95, 2))
     # all_data[['USER_ID', 'label']].to_csv('xgb_submission.csv', index=None)
@@ -97,6 +97,10 @@ def train_by_xgb():
 
 
 def process_for_kmeans(df):
+    print("proces raw data for k-means...")
+    # 去除用户USER_ID 为空的数据
+    df.dropna(subset=['USER_ID'], inplace=True, axis=0)
+
     # 使用平均值填充AGE的缺失值
     df['AGE'] = df['AGE'].fillna(df['AGE'].mean())
     # 使用0 填充Sale_houcs/JFCS和CFCF的缺失值
@@ -120,9 +124,10 @@ def process_for_kmeans(df):
 
 
 def train_by_kmeans():
-    print("training k-means")
-    data = pd.read_csv('data/credit_pri_data.csv')
+    data = pd.read_csv('data/credit_final_data.csv')
     data = process_for_kmeans(df=data)
+
+    print("training k-means")
     clf = KMeans(algorithm='auto', copy_x=True, init='k-means++', max_iter=300,
                  n_clusters=10, n_init=10, n_jobs=1, precompute_distances='auto',
                  random_state=42, tol=0.0001, verbose=0)
@@ -148,11 +153,16 @@ def main():
     """
     result_xgb = train_by_xgb()
     result_kmeans = train_by_kmeans()
+    result_xgb.drop_duplicates(subset=['USER_ID'], keep='first', inplace=True)
+    result_kmeans.drop_duplicates(subset=['USER_ID'], keep='first', inplace=True)
+
+    print(len(result_xgb))
+    print(len(result_kmeans))
+
     result = pd.merge(result_xgb, result_kmeans, how='inner', on='USER_ID')
     result['label'] = result['label_x'] * 0.7 + result['label_y'] * 0.3
     result['label'] = result['label'].apply(lambda x: round(x, 2))
-    result.drop_duplicates(subset='USER_ID',keep='first', inplace=True)
-    result.rename(columns={ 'USER_ID': '用户ID','label':'房产信用评分'}, inplace=True)
+    result.rename(columns={'USER_ID': '用户ID', 'label': '房产信用评分'}, inplace=True)
     result[['用户ID', '房产信用评分']].to_csv('User_Credit_Predict.csv', index=False)
 
 

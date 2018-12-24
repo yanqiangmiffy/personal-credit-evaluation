@@ -54,10 +54,10 @@ def train_by_xgb():
     # 处理类别不均衡问题
     data = pd.read_csv('data/credit_pri_data.csv')
     X, y = process_for_classification(df=data)
-    # smote = SMOTE(random_state=42)
-    # x_res, y_res = smote.fit_sample(X, y)
+    smote = SMOTE(random_state=42)
+    x_res, y_res = smote.fit_sample(X.values, y.values)
     # 3:1 将数据换分出训练集和测试集
-    x_train, x_test, y_train, y_test = train_test_split(X, y)
+    x_train, x_test, y_train, y_test = train_test_split(x_res, y_res)
     print(len(x_train), len(x_test), len(x_train) + len(x_test))
     clf = XGBClassifier(max_depth=6)
     clf.fit(x_train, y_train,
@@ -70,28 +70,26 @@ def train_by_xgb():
     y_pred = clf.predict(x_test)
     label = pd.DataFrame()
     label['y_pred'] = y_pred
-    print(label['y_pred'].value_counts())
     y_prob = clf.predict_proba(x_test)[:, 1]
     print(accuracy_score(y_test, y_pred))
     print(roc_auc_score(y_test, y_prob))
-    print(y_prob)
 
     # 根据分类概率得出用户评分
     print("forming the final result")
     all_data = pd.read_csv('data/credit_pri_data.csv')
     x_all, _ = process_for_classification(df=all_data)
-    all_data['label'] = clf.predict_proba(x_all)[:, 0]
-    all_data['label'] = all_data['label'].apply(lambda x: round((x * 100 - 90) * 9.7, 2))
-    all_data[['USER_ID', 'label']].to_csv('xgb_submission.csv', index=None)
+    all_data['label'] = clf.predict_proba(x_all.values)[:, 0]
+    all_data['label'] = all_data['label'].apply(lambda x: round(x * 95, 2))
+    # all_data[['USER_ID', 'label']].to_csv('xgb_submission.csv', index=None)
 
-    # from xgboost import plot_importance
-    # from matplotlib import pyplot
-    #
-    # plot_importance(clf, height=0.5, max_num_features=15)
-    # pyplot.show()
+    from xgboost import plot_importance
+    from matplotlib import pyplot
 
+    plot_importance(clf, height=0.5, max_num_features=15)
+    pyplot.show()
 
-train_by_xgb()
+    result = all_data[['USER_ID', 'label']]
+    return result
 
 
 def process_for_kmeans(df):
@@ -118,6 +116,7 @@ def process_for_kmeans(df):
 
 
 def train_by_kmeans():
+    print("training k-means")
     data = pd.read_csv('data/credit_pri_data.csv')
     data = process_for_kmeans(df=data)
     clf = KMeans(algorithm='auto', copy_x=True, init='k-means++', max_iter=300,
@@ -132,7 +131,24 @@ def train_by_kmeans():
     data['label'].value_counts().plot(kind='barh')
     plt.show()
     data['label'] = data['label'].apply(lambda x: (10 - x) * 9)
-    data[['USER_ID', 'label']].to_csv('submission.csv', index=None)
+    # data[['USER_ID', 'label']].to_csv('submission.csv', index=None)
+
+    result = data[['USER_ID', 'label']]
+    return result
 
 
-train_by_kmeans()
+def main():
+    """
+    根据xgb分类模型以及kmeans聚类结果，降权求和
+    :return:
+    """
+    result_xgb = train_by_xgb()
+    result_kmeans = train_by_kmeans()
+    result = pd.merge(result_xgb, result_kmeans, how='inner', on='USER_ID')
+    result['label']=result['label_x']*0.7+result['label_y']*0.3
+    result['label']=result['label'].apply(lambda x:round(x,2))
+    result[['USER_ID', 'label']].to_csv('User_Credit_Predict.csv',index=False)
+
+
+if __name__ == '__main__':
+    main()

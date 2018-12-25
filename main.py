@@ -33,7 +33,7 @@ def process_for_xgb(df):
     df['JFCS'] = df['JFCS'].fillna(0).astype('int32')
     df['CFCS'] = df['CFCS'].fillna(0).astype('int32')  # 类别标签1
     df['CFCS_Label'] = df['CFCS'].apply(lambda x: 1 if x != 0 else 0)  # 类别标签1
-    df['PROPERTY_DATE']=df['PROPERTY_SIGN_DATE'].apply(lambda x:x.split('/')[-1]).astype('int32')
+    df['PROPERTY_DATE'] = df['PROPERTY_SIGN_DATE'].apply(lambda x: x.split('/')[-1]).astype('int32')
     # print(df['Mortgage_starttime'].count())
     # df['PROPERTY_DATE'].value_counts().plot(kind='barh')
     # plt.show()
@@ -45,7 +45,7 @@ def process_for_xgb(df):
 
     # 处理类别标签 one-hot
     cate_cols = ['TEL_ID', 'PROVINCE', 'NATIONALITY', 'PROPERTY_ID', 'PROPERTY_USAGE_TYPE', 'PROPERTY_LOAN_WAY',
-                 'PROPERTY_PAYMENT','PROPERTY_DATE']
+                 'PROPERTY_PAYMENT', 'PROPERTY_DATE']
     df = pd.get_dummies(df, columns=cate_cols)
     # 提取X和Y标签
     cols = [col for col in df.columns if col not in ['USER_ID', 'CFCS_Label', 'CFCS', 'JFCS']]
@@ -142,9 +142,16 @@ def train_by_kmeans():
                  random_state=42, tol=0.0001, verbose=0)
     clf.fit(data)
     data['label'] = clf.labels_  # 对原数据表进行类别标记
+    # 按照人数从低到高排序
+    label_score = dict()
+    as_labels = data['label'].value_counts(ascending=True).index.tolist()
+    print(as_labels)
+    for index, label in enumerate(as_labels):
+        label_score[label] = (index + 1) * 9
+
     data['label'].value_counts().plot(kind='barh')
     plt.show()
-    data['label'] = data['label'].apply(lambda x: (10 - x) * 9)
+    data['label'] = data['label'].apply(lambda x: label_score[x])
     # data[['USER_ID', 'label']].to_csv('submission.csv', index=None)
 
     result = data[['USER_ID', 'label']]
@@ -166,7 +173,7 @@ def main():
 
     result = pd.merge(result_xgb, result_kmeans, how='inner', on='USER_ID')
     result['label'] = result['label_x'] * 0.7 + result['label_y'] * 0.3
-    result.to_csv('result.csv')
+    # result.to_csv('result.csv')
 
     result['USER_ID'] = result['USER_ID'].astype('int32')
     result['label'] = result['label'].apply(lambda x: round(x, 2))
